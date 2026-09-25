@@ -14,7 +14,7 @@ from about import AboutTab
 class ToolGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("开发者调试工具")
+        self.root.title("devbugtools")
 
         win_w = 1200
         win_h = 900
