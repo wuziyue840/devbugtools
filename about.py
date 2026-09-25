@@ -15,7 +15,7 @@ import tkinter.font as tkfont
 import webbrowser
 from tkinter import ttk, messagebox
 
-APP_NAME = "开发者调试工具"
+APP_NAME = "开发者调试工具 / devbugtools"
 APP_VERSION = "v1.0.0"
 DEVELOPER = "倾听风雨 / wuziyue840"
 LICENSE_NAME = "MIT"
