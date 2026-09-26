@@ -38,11 +38,13 @@ main.py            入口：窗口 + Notebook + 注册标签页
 port_scan.py       功能页 1：端口进程查看
 code_count.py      功能页 2：代码行数统计
 about.py           功能页 3：关于（版本/开发者/声明/赞助码，只读）
+bagua.py           功能页 4：八卦盘（每日一签，只读）
 assets/            关于页用的素材（wechat.png / alipay.png 赞助码）
 share/             非功能组件（公共部件与纯逻辑，不含界面功能）
 ├── ui_common.py       ToolTab 基类：状态栏/进度条/分片任务/表格排序筛选/
 │                      滚动条按需显示/列宽自适应/CSV 导出/复制/右键菜单
 ├── ignore_rules.py    文件枚举与忽略：git 清单、黑名单剪枝、二进制嗅探、安全阀
+├── fortune_texts.py   八卦盘句子库（细分类词料 + 组合展开，≥500 条/池）
 ├── loc_langs.py       扩展名 → 语言名 + 注释语法表
 ├── loc_engine.py      统计引擎：内置（轻量/词法）+ scc/tokei/cloc 适配
 └── settings.py        配置读写（默认记录在 %APPDATA%\StarBoxTools\ 下）
@@ -143,6 +145,16 @@ share/             非功能组件（公共部件与纯逻辑，不含界面功�
 - **不需要 Pillow**：Tk 8.6 自带 PNG 支持，少一个依赖
 - **打包成 exe**：记得带上素材。分隔符按系统：Windows 用 `;`、macOS/Linux 用 `:`，即 `--add-data "assets;assets"`（Windows）或 `--add-data "assets:assets"`（macOS）。页面用 `sys._MEIPASS` 定位，源码运行和打包运行都能找到
 
+## 功能页 4：八卦盘
+
+点「开始占卜」→ 八卦盘加速旋转、逐渐减速停下，左右两张卡片文字快滚并同步定格：**左边网络风险天气、右边代码屎山天气**，底部给今日宜忌。
+
+- **每日一签**：随机种子用当天日期，同一天重复点结果不变，跨天自动换。转动中卡片快滚的是随机假内容，定格的才是抽定的结果
+- **想加句子**：改 `share/fortune_texts.py`。三个池（网络 / 代码 / 宜忌）都是"细分类词料 + 句式模板"组合出来的，往词料里追加即可，组合空间会自动变大；每个池都 ≥500 条不重复
+- **想调动画**：`bagua.py` 顶部的 `SPIN_TICKS`（拍数）、`BASE_DELAY_MS`（起始延时）——数值越大转得越久
+- 转盘是纯 Canvas 画图（三圈爻线 + 阴阳鱼 + 指针），**没用 ☰ Unicode 卦符**——YaHei 缺这些字形，Tk 又不做字体回退，会显示成方框
+- 这一页**只读**：不写任何文件、无网络请求，也不继承 `ToolTab`
+
 ## 新增一个功能页
 
 一个功能页 = 本目录下一个模块，模块里一个 `ttk.Frame` 子类。按页面类型挑一种写法。
@@ -176,7 +188,7 @@ class MyToolTab(ToolTab):
 
 ### 静态页面（只有文字和图片）
 
-不用继承 `ToolTab`，直接 `class MyTab(ttk.Frame)` 就行，也没有必须实现的方法。参考同目录的 `about.py`。
+不用继承 `ToolTab`，直接 `class MyTab(ttk.Frame)` 就行，也没有必须实现的方法。参考同目录的 `about.py`（纯展示）和 `bagua.py`（展示 + 动画）。
 
 ### 注册成标签页
 

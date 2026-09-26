@@ -9,6 +9,7 @@ import ctypes
 from port_scan import PortScanTab
 from code_count import CodeCountTab
 from about import AboutTab
+from bagua import BaguaTab
 
 
 class ToolGUI:
@@ -38,6 +39,9 @@ class ToolGUI:
 
         self.about = AboutTab(self.notebook)
         self.notebook.add(self.about, text="关于")
+
+        self.bagua = BaguaTab(self.notebook)
+        self.notebook.add(self.bagua, text="八卦盘")
 
 
 if __name__ == "__main__":
