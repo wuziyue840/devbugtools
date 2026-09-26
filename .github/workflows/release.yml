@@ -106,29 +106,28 @@ jobs:
           $VERSION = $TAG_NAME.TrimStart("v")
           
           if (Test-Path "CHANGELOG.md") {
-              $content = Get-Content -Path "CHANGELOG.md" -Raw
+              $lines = Get-Content CHANGELOG.md
+              $startFound = $false
+              $bodyLines = @()
               
-              # 1. 精准匹配版本号所在的那一行 ## [1.0.0] 或 ## 1.0.0
-              $versionHeader = "(?m)^##\s*\[?$VERSION\]?.*$"
-              $matchVersion = [regex]::Match($content, $versionHeader)
-              
-              if ($matchVersion.Success) {
-                  # 2. 从该版本的标题之后开始截取，直到遇到下一个 ## 为止
-                  $startIndex = $matchVersion.Index + $matchVersion.Length
-                  $remainingContent = $content.Substring($startIndex)
-                  $nextHeaderMatch = [regex]::Match($remainingContent, "(?m)^##\s*")
-                  
-                  if ($nextHeaderMatch.Success) {
-                      $body = $remainingContent.Substring(0, $nextHeaderMatch.Index)
-                  } else {
-                      $body = $remainingContent
+              foreach ($line in $lines) {
+                  # 如果遇到 ## [1.0.0] 或 ## 1.0.0 或 ## v1.0.0，标记开始，并跳过这一行
+                  if (-not $startFound -and $line -match "^##\s*\[?v?$VERSION\]?") {
+                      $startFound = $true
+                      continue
                   }
-                  
-                  # 3. 清理多余空行并输出
-                  $body.Trim() | Out-File -FilePath "release_body.txt" -Encoding utf8
-              } else {
-                  "未在 CHANGELOG.md 中找到版本 $VERSION 的更新说明。" | Out-File -FilePath "release_body.txt" -Encoding utf8
+                  # 如果已开始，且遇到了下一个 ## 版本标题，立刻停止
+                  if ($startFound -and $line -match "^##\s*\[?v?[0-9]") {
+                      break
+                  }
+                  # 收集两个版本之间的内容
+                  if ($startFound) {
+                      $bodyLines += $line
+                  }
               }
+              
+              # 输出清理后的内容
+              ($bodyLines -join "`n").Trim() | Out-File -FilePath "release_body.txt" -Encoding utf8
           } else {
               "CHANGELOG.md 文件不存在。" | Out-File -FilePath "release_body.txt" -Encoding utf8
           }
