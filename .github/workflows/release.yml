@@ -98,14 +98,12 @@ jobs:
           echo "today=$TODAY" >> $env:GITHUB_OUTPUT
           echo "display_name=${{ github.ref_name }}-$TODAY" >> $env:GITHUB_OUTPUT
 
-      # 抓取 CHANGELOG 并强制替换标题行，不管你有没有写日期
+      # 抓取 CHANGELOG，并自动删除提取出来的第一行标题，保留正文
       - name: Extract Release Body from CHANGELOG.md
         shell: pwsh
         run: |
           $TAG_NAME = "${{ github.ref_name }}"
           $VERSION = $TAG_NAME.TrimStart("v")
-          $TODAY = "${{ steps.date_info.outputs.today }}"
-          $DISPLAY_TITLE = "${{ steps.date_info.outputs.display_name }}"
           
           if (Test-Path "CHANGELOG.md") {
               $content = Get-Content -Path "CHANGELOG.md" -Raw
@@ -113,13 +111,14 @@ jobs:
               $match = [regex]::Match($content, $pattern)
               if ($match.Success) {
                   $body = $match.Value
-                  $body = $body -replace "(?m)^##\s*\[?$VERSION\]?.*$", "## $DISPLAY_TITLE"
+                  # 核心修改：将匹配到的 ## 标题行删除，并清理多余空行
+                  $body = ($body -replace "(?m)^##\s*\[?$VERSION\]?.*$", "").Trim()
                   $body | Out-File -FilePath "release_body.txt" -Encoding utf8
               } else {
-                  "## $DISPLAY_TITLE`n`n未在 CHANGELOG.md 中找到版本 $VERSION 的更新说明。" | Out-File -FilePath "release_body.txt" -Encoding utf8
+                  "未在 CHANGELOG.md 中找到版本 $VERSION 的更新说明。" | Out-File -FilePath "release_body.txt" -Encoding utf8
               }
           } else {
-              "## $DISPLAY_TITLE`n`nCHANGELOG.md 文件不存在，请手动编辑更新说明。" | Out-File -FilePath "release_body.txt" -Encoding utf8
+              "CHANGELOG.md 文件不存在，请手动编辑更新说明。" | Out-File -FilePath "release_body.txt" -Encoding utf8
           }
 
       - name: Upload Artifacts for Debugging
@@ -129,6 +128,7 @@ jobs:
           name: build-artifacts
           path: dist/
 
+      # 发布 Release：使用顶部大标题，正文直接是 CHANGELOG 的具体内容
       - name: Create Release and Upload Assets
         uses: softprops/action-gh-release@v2
         with:
