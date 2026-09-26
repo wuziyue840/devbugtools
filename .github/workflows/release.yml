@@ -111,14 +111,14 @@ jobs:
               $match = [regex]::Match($content, $pattern)
               if ($match.Success) {
                   $body = $match.Value
-                  # 核心修改：将匹配到的 ## 标题行删除，并清理多余空行
-                  $body = ($body -replace "(?m)^##\s*\[?$VERSION\]?.*$", "").Trim()
+                  # 保险操作：删除所有以 ## 开头的 Markdown 标题行，不管它长什么样
+                  $body = ($body -replace "(?m)^##.*$", "").Trim()
                   $body | Out-File -FilePath "release_body.txt" -Encoding utf8
               } else {
                   "未在 CHANGELOG.md 中找到版本 $VERSION 的更新说明。" | Out-File -FilePath "release_body.txt" -Encoding utf8
               }
           } else {
-              "CHANGELOG.md 文件不存在，请手动编辑更新说明。" | Out-File -FilePath "release_body.txt" -Encoding utf8
+              "CHANGELOG.md 文件不存在。" | Out-File -FilePath "release_body.txt" -Encoding utf8
           }
 
       - name: Upload Artifacts for Debugging
