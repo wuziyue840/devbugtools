@@ -10,41 +10,31 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
+  # Windows 构建
+  build-windows:
     runs-on: windows-latest
     permissions:
       contents: write
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
-
-      - name: Install dependencies
-        run: |
+      - run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
 
-      # 健壮性极强的版本号生成，手动触发或带后缀的 Tag 都不会崩
-      - name: Generate version file
+      - name: 生成版本信息
         shell: pwsh
         run: |
           $TAG_NAME = "${{ github.ref_name }}"
-          $VERSION = $TAG_NAME.TrimStart("v")
-          $VERSION = $VERSION -replace '[^0-9.]', '.'
+          $VERSION = $TAG_NAME.TrimStart("v") -replace '[^0-9.]', '.'
           $VERSION_ARR = $VERSION.Split(".") | Where-Object { $_ -ne "" }
           while ($VERSION_ARR.Count -lt 3) { $VERSION_ARR += "0" }
-          $MAJOR = $VERSION_ARR[0]
-          $MINOR = $VERSION_ARR[1]
-          $PATCH = $VERSION_ARR[2]
+          $MAJOR, $MINOR, $PATCH = $VERSION_ARR[0], $VERSION_ARR[1], $VERSION_ARR[2]
           $BUILD = if ($VERSION_ARR.Count -gt 3 -and $VERSION_ARR[3] -match '^\d+$') { $VERSION_ARR[3] } else { "0" }
-          
           $VERSION_TXT = @"
           VSVersionInfo(
             ffi=FixedFileInfo(
@@ -69,28 +59,67 @@ jobs:
           "@
           Set-Content -Path version_info.txt -Value $VERSION_TXT -Encoding utf8
 
-      - name: Build with PyInstaller (One-File)
-        run: pyinstaller --noconsole --onefile --name devbugtools --add-data "assets;assets" --version-file version_info.txt main.py
-
-      - name: Build with PyInstaller (One-Folder)
-        run: pyinstaller --noconsole --onedir --name devbugtools --add-data "assets;assets" --version-file version_info.txt main.py
-
-      - name: Zip One-Folder
-        shell: pwsh
+      # 使用分号 ; 分隔
+      - run: pyinstaller --noconsole --onefile --name devbugtools --add-data "assets;assets" --version-file version_info.txt main.py
+      - run: pyinstaller --noconsole --onedir --name devbugtools --add-data "assets;assets" --version-file version_info.txt main.py
+      - shell: pwsh
         run: Compress-Archive -Path dist\devbugtools\* -DestinationPath dist\devbugtools-${{ github.ref_name }}-win-folder.zip
-
-      - name: Verify Build Artifacts
-        shell: pwsh
-        run: |
-          if (!(Test-Path "dist\devbugtools.exe")) { Throw "One-file EXE 构建失败！" }
-          if (!(Test-Path "dist\devbugtools-${{ github.ref_name }}-win-folder.zip")) { Throw "One-folder ZIP 构建失败！" }
-
-      - name: Generate SHA256
-        shell: pwsh
+      - shell: pwsh
         run: Get-FileHash dist\devbugtools.exe -Algorithm SHA256 | Select-Object Hash | Out-File -FilePath dist\devbugtools.exe.sha256 -Encoding ascii
 
-      # 获取当天日期，拼接标签，如 v1.0.0-2026-09-26
-      - name: Get Release Date
+      - uses: actions/upload-artifact@v4
+        with:
+          name: win-exe
+          path: dist/devbugtools.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: win-folder-zip
+          path: dist/devbugtools-${{ github.ref_name }}-win-folder.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: win-sha256
+          path: dist/devbugtools.exe.sha256
+
+  # macOS 构建
+  build-macos:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+      # 使用冒号 : 分隔
+      - run: pyinstaller --windowed --onedir --name devbugtools --add-data "assets:assets" main.py
+      - run: |
+          cd dist
+          zip -r devbugtools-${{ github.ref_name }}-macos.zip devbugtools.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-zip
+          path: dist/devbugtools-${{ github.ref_name }}-macos.zip
+
+  # 发布 (等双平台构建完再执行)
+  release:
+    needs: [build-windows, build-macos]
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: all-artifacts
+          merge-multiple: true
+
+      - name: 获取日期
         id: date_info
         shell: pwsh
         run: |
@@ -99,7 +128,7 @@ jobs:
           echo "display_name=${{ github.ref_name }}-$TODAY" >> $env:GITHUB_OUTPUT
 
       # 抓取 CHANGELOG，并自动略过标题抓取正文
-      - name: Extract Release Body from CHANGELOG.md
+      - name: 提取 CHANGELOG 正文
         shell: pwsh
         run: |
           $TAG_NAME = "${{ github.ref_name }}"
@@ -132,21 +161,14 @@ jobs:
               "CHANGELOG.md 文件不存在。" | Out-File -FilePath "release_body.txt" -Encoding utf8
           }
 
-      - name: Upload Artifacts for Debugging
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-artifacts
-          path: dist/
-
-      # 发布 Release：使用顶部大标题，正文直接是 CHANGELOG 的具体内容
-      - name: Create Release and Upload Assets
+      - name: 发布 Release
         uses: softprops/action-gh-release@v2
         with:
           name: "Release ${{ steps.date_info.outputs.display_name }}"
           body_path: release_body.txt
           generate_release_notes: false
           files: |
-            dist/devbugtools.exe
-            dist/devbugtools-${{ github.ref_name }}-win-folder.zip
-            dist/devbugtools.exe.sha256
+            all-artifacts/devbugtools.exe
+            all-artifacts/devbugtools-${{ github.ref_name }}-win-folder.zip
+            all-artifacts/devbugtools.exe.sha256
+            all-artifacts/devbugtools-${{ github.ref_name }}-macos.zip

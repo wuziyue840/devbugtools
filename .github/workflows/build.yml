@@ -8,27 +8,20 @@ on:
   workflow_dispatch:
 
 jobs:
-  test-build:
+  build-windows:
     runs-on: windows-latest
     permissions:
       contents: read
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
-
-      - name: Install dependencies
-        run: |
+      - run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
-
       - name: Generate test version file
         shell: pwsh
         run: |
@@ -57,12 +50,34 @@ jobs:
           )
           "@
           Set-Content -Path version_info.txt -Value $VERSION_TXT -Encoding utf8
-
-      - name: Build with PyInstaller (One-File)
-        run: pyinstaller --noconsole --onefile --name devbugtools --add-data "assets;assets" --version-file version_info.txt main.py
-
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
+      # Windows 使用分号 ;
+      - run: pyinstaller --noconsole --onefile --name devbugtools --add-data "assets;assets" --version-file version_info.txt main.py
+      - uses: actions/upload-artifact@v4
         with:
-          name: devbugtools-test-build-${{ github.run_number }}
+          name: devbugtools-test-build-win-${{ github.run_number }}
           path: dist/devbugtools.exe
+
+  build-macos:
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+      # macOS 使用冒号 : 且 --windowed 会生成 .app 包
+      - run: pyinstaller --windowed --onedir --name devbugtools --add-data "assets:assets" main.py
+      # 将 .app 打包成 zip
+      - run: |
+          cd dist
+          zip -r devbugtools-macos-test-build-${{ github.run_number }}.zip devbugtools.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: devbugtools-test-build-macos-${{ github.run_number }}
+          path: dist/devbugtools-macos-test-build-${{ github.run_number }}.zip
