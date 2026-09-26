@@ -98,7 +98,7 @@ jobs:
           echo "today=$TODAY" >> $env:GITHUB_OUTPUT
           echo "display_name=${{ github.ref_name }}-$TODAY" >> $env:GITHUB_OUTPUT
 
-      # 抓取 CHANGELOG，并自动删除提取出来的第一行标题，保留正文
+      # 抓取 CHANGELOG，并自动略过标题抓取正文
       - name: Extract Release Body from CHANGELOG.md
         shell: pwsh
         run: |
@@ -107,13 +107,25 @@ jobs:
           
           if (Test-Path "CHANGELOG.md") {
               $content = Get-Content -Path "CHANGELOG.md" -Raw
-              $pattern = "(?s)##\s*\[?$VERSION\]?.*?(?=\n##\s*\[|\Z)"
-              $match = [regex]::Match($content, $pattern)
-              if ($match.Success) {
-                  $body = $match.Value
-                  # 保险操作：删除所有以 ## 开头的 Markdown 标题行，不管它长什么样
-                  $body = ($body -replace "(?m)^##.*$", "").Trim()
-                  $body | Out-File -FilePath "release_body.txt" -Encoding utf8
+              
+              # 1. 精准匹配版本号所在的那一行 ## [1.0.0] 或 ## 1.0.0
+              $versionHeader = "(?m)^##\s*\[?$VERSION\]?.*$"
+              $matchVersion = [regex]::Match($content, $versionHeader)
+              
+              if ($matchVersion.Success) {
+                  # 2. 从该版本的标题之后开始截取，直到遇到下一个 ## 为止
+                  $startIndex = $matchVersion.Index + $matchVersion.Length
+                  $remainingContent = $content.Substring($startIndex)
+                  $nextHeaderMatch = [regex]::Match($remainingContent, "(?m)^##\s*")
+                  
+                  if ($nextHeaderMatch.Success) {
+                      $body = $remainingContent.Substring(0, $nextHeaderMatch.Index)
+                  } else {
+                      $body = $remainingContent
+                  }
+                  
+                  # 3. 清理多余空行并输出
+                  $body.Trim() | Out-File -FilePath "release_body.txt" -Encoding utf8
               } else {
                   "未在 CHANGELOG.md 中找到版本 $VERSION 的更新说明。" | Out-File -FilePath "release_body.txt" -Encoding utf8
               }
