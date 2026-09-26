@@ -5,6 +5,9 @@
 各功能页继承 ToolTab，只写自己的业务；这里的东西一律不依赖具体功能。
 """
 
+import os
+import subprocess
+import sys
 import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import ttk, filedialog, messagebox
@@ -16,6 +19,27 @@ TREE_STYLE = "Tool.Treeview"
 # 列宽自适应时每列内容两侧预留的留白（像素）。给大了会让 9 列的端口表
 # 在 1200px 窗口下略微超出、白白多出一条横向滚动条，故取 20。
 COLUMN_PADDING = 20
+
+
+def open_path(path):
+    """用系统默认方式打开文件或目录。
+
+    Windows 用 os.startfile；macOS 用 `open`；其余用 `xdg-open`（现有行为，
+    保留但不针对 Linux 做验证）。失败会抛 OSError，由调用方弹各自的提示。
+    """
+    if hasattr(os, "startfile"):
+        os.startfile(path)
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", path])
+    else:
+        subprocess.Popen(["xdg-open", path])
+
+
+def privilege_hint():
+    """权限不足时的提示语：Windows 说管理员，macOS/Linux 说 root/sudo。"""
+    if os.name == "nt":
+        return "以管理员身份运行"
+    return "以 root 权限运行（如 sudo python main.py）"
 
 
 def ensure_tree_style(widget):
@@ -204,6 +228,8 @@ class ToolTab(ttk.Frame):
         self._scrollbars[str(tree)] = (vsb, hsb)
         tree.bind("<Double-1>", self.on_row_double_click)
         tree.bind("<Control-c>", lambda event: self.copy_selected())
+        # macOS 的复制习惯是 Cmd-C，两个都绑
+        tree.bind("<Command-c>", lambda event: self.copy_selected())
         # 尺寸变化或拖过列宽之后重新判断滚动条要不要显示。
         # 用 after_idle 而不是当场判断：Tk 要等这一轮事件处理完才会重新布局，
         # 当场读到的 yview 还是旧的。
@@ -441,7 +467,12 @@ class ToolTab(ttk.Frame):
             else:
                 self.menu.add_command(label=entry[0], command=entry[1])
         if self.tree is not None:
-            self.tree.bind("<Button-3>", self.on_row_right_click)
+            # macOS Aqua 的 Tk 把右键上报为 Button-2；其余平台是 Button-3。
+            # 不在非 macOS 上绑 Button-2 —— X11 的 Button-2 是中键，会变成中键弹菜单。
+            if sys.platform == "darwin":
+                self.tree.bind("<Button-2>", self.on_row_right_click)
+            else:
+                self.tree.bind("<Button-3>", self.on_row_right_click)
         return self.menu
 
     def on_row_right_click(self, event):

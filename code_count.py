@@ -15,7 +15,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 from share import ignore_rules, loc_engine, loc_langs, settings
-from share.ui_common import ToolTab
+from share.ui_common import ToolTab, open_path
 
 FILE_HEADINGS = (
     ("origin", "来源", 130),
@@ -716,11 +716,7 @@ class CodeCountTab(ToolTab):
             messagebox.showerror("错误", f"文件不存在：{path}")
             return
         try:
-            if hasattr(os, "startfile"):
-                os.startfile(path)
-            else:
-                import subprocess
-                subprocess.Popen(["xdg-open", path])
+            open_path(path)
             self.set_status(f"已打开：{path}")
         except Exception as exc:
             messagebox.showerror("错误", f"打开失败：{exc}")
@@ -732,11 +728,7 @@ class CodeCountTab(ToolTab):
             return
         folder = os.path.dirname(row["path"])
         try:
-            if hasattr(os, "startfile"):
-                os.startfile(folder)
-            else:
-                import subprocess
-                subprocess.Popen(["xdg-open", folder])
+            open_path(folder)
             self.set_status(f"已打开目录：{folder}")
         except Exception as exc:
             messagebox.showerror("错误", f"打开目录失败：{exc}")

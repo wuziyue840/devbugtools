@@ -7,7 +7,7 @@ from tkinter import ttk, messagebox
 import psutil
 import os
 
-from share.ui_common import ToolTab
+from share.ui_common import ToolTab, open_path, privilege_hint
 
 
 # 常见端口用途备注，用于表格的“备注”列
@@ -201,7 +201,7 @@ class PortScanTab(ToolTab):
         try:
             conns = psutil.net_connections(kind="inet")
         except psutil.AccessDenied:
-            messagebox.showerror("权限不足", "无法读取系统连接列表，请以管理员身份运行本工具。")
+            messagebox.showerror("权限不足", f"无法读取系统连接列表，请{privilege_hint()}。")
             return
         except Exception as exc:
             messagebox.showerror("错误", f"读取网络连接失败：{exc}")
@@ -349,11 +349,7 @@ class PortScanTab(ToolTab):
             return
         folder = os.path.dirname(exe)
         try:
-            if hasattr(os, "startfile"):
-                os.startfile(folder)
-            else:
-                import subprocess
-                subprocess.Popen(["xdg-open", folder])
+            open_path(folder)
             self.set_status(f"已打开目录：{folder}")
         except Exception as exc:
             messagebox.showerror("错误", f"打开目录失败：{exc}")
@@ -386,7 +382,7 @@ class PortScanTab(ToolTab):
                 if messagebox.askyesno("确认", f"进程 {name} 未在 3 秒内退出，是否强制结束？"):
                     proc.kill()
         except psutil.AccessDenied:
-            messagebox.showerror("错误", "权限不足，请以管理员身份运行后重试")
+            messagebox.showerror("错误", f"权限不足，请{privilege_hint()}后重试")
             return
         except psutil.NoSuchProcess:
             pass

@@ -6,10 +6,14 @@
 
 先切到**项目目录**，再运行。
 
+Windows / macOS：
+
 ```bat
 cd <项目目录>
 python main.py
 ```
+
+> macOS 的差异：端口页读系统连接表必须 root，用 `sudo python main.py` 启动；统计页与关于页不需要。
 
 ### 依赖
 
@@ -137,7 +141,7 @@ share/             非功能组件（公共部件与纯逻辑，不含界面功�
 - **改显示大小**：改 `about.py` 里的 `QR_SUBSAMPLE`。2 = 缩到一半（256×256）；Tk 只支持整数倍缩放，所以填 3 就是缩到三分之一
 - **图缺失不会崩**：原位显示一行"二维码缺失 + 文件名"，页面其余部分照常
 - **不需要 Pillow**：Tk 8.6 自带 PNG 支持，少一个依赖
-- **打包成 exe**：记得带上素材，参数 `--add-data "assets;assets"`（页面用 `sys._MEIPASS` 定位，源码运行和打包运行都能找到）
+- **打包成 exe**：记得带上素材。分隔符按系统：Windows 用 `;`、macOS/Linux 用 `:`，即 `--add-data "assets;assets"`（Windows）或 `--add-data "assets:assets"`（macOS）。页面用 `sys._MEIPASS` 定位，源码运行和打包运行都能找到
 
 ## 新增一个功能页
 
@@ -348,6 +352,7 @@ rm -f ~/.config/StarBoxTools/settings.json ~/.config/StarBoxTools/prefs.json
 
 ## 已知限制
 
+- **平台**：面向 Windows 与 macOS。macOS 上端口页读系统连接表必须 root（psutil 的系统级限制，绕不过），非 root 会弹权限提示，`sudo python main.py` 启动即可；统计页与关于页在 macOS 上不需要 root。
 - **外部引擎（scc / tokei / cloc）的适配代码已写好，但没有经过真机验证**（三种都没实测过）。未安装时下拉框标注"未安装"，选中后点统计会明确报错并中止，不会静默出错。
 - **外部引擎只支持单个扫描目标**：多目标时选它会被明确拒绝（提示改用内置引擎），不会静默只扫一个。它们各自也只能用自身参数近似表达排除/后缀筛选。
 - 引擎可用性在**打开标签页时探测一次**，运行中新装外部工具需要重启本工具。
