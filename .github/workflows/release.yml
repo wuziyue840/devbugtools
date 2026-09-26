@@ -1,0 +1,142 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+\.[0-9]+\.[0-9]+*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      # 1. 动态生成版本文件
+      - name: Generate version file
+        shell: pwsh
+        run: |
+          $TAG_NAME = "${{ github.ref_name }}"
+          $VERSION = $TAG_NAME.TrimStart("v")
+          $VERSION = $VERSION -replace '[^0-9.]', ''
+          $VERSION_ARR = $VERSION.Split(".")
+          $VERSION_TXT = @"
+          VSVersionInfo(
+            ffi=FixedFileInfo(
+              filevers=($($VERSION_ARR[0]), $($VERSION_ARR[1]), $($VERSION_ARR[2]), 0),
+              prodvers=($($VERSION_ARR[0]), $($VERSION_ARR[1]), $($VERSION_ARR[2]), 0)
+            ),
+            kids=[
+              StringFileInfo([
+                StringTable(u'040904B0', [
+                  StringStruct(u'CompanyName', u'倾听风雨'),
+                  StringStruct(u'FileDescription', u'开发者调试工具'),
+                  StringStruct(u'FileVersion', u'$VERSION'),
+                  StringStruct(u'InternalName', u'devbugtools'),
+                  StringStruct(u'LegalCopyright', u'Copyright (c) 2026 wuziyue840'),
+                  StringStruct(u'OriginalFilename', u'devbugtools.exe'),
+                  StringStruct(u'ProductName', u'开发者调试工具'),
+                  StringStruct(u'ProductVersion', u'$VERSION')])
+              ]),
+              VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
+            ]
+          )
+          "@
+          Set-Content -Path version_info.txt -Value $VERSION_TXT -Encoding utf8
+
+      # 2. 打包（单文件 + 文件夹）
+      - name: Build with PyInstaller (One-File)
+        run: pyinstaller --noconsole --onefile --name devbugtools --add-data "assets;assets" --version-file version_info.txt main.py
+
+      - name: Build with PyInstaller (One-Folder)
+        run: pyinstaller --noconsole --onedir --name devbugtools --add-data "assets;assets" --version-file version_info.txt main.py
+
+      - name: Zip One-Folder
+        shell: pwsh
+        run: Compress-Archive -Path dist\devbugtools\* -DestinationPath dist\devbugtools-${{ github.ref_name }}-win-folder.zip
+
+      # 3. 产物校验 + SHA256
+      - name: Verify Build Artifacts
+        shell: pwsh
+        run: |
+          if (!(Test-Path "dist\devbugtools.exe")) { Throw "One-file EXE 构建失败！" }
+          if (!(Test-Path "dist\devbugtools-${{ github.ref_name }}-win-folder.zip")) { Throw "One-folder ZIP 构建失败！" }
+
+      - name: Generate SHA256
+        shell: pwsh
+        run: Get-FileHash dist\devbugtools.exe -Algorithm SHA256 | Select-Object Hash | Out-File -FilePath dist\devbugtools.exe.sha256 -Encoding ascii
+
+      # 4. 获取当前日期，生成发布名称（连字符格式 v1.0.0-2026-09-26）
+      - name: Get Release Date
+        id: date_info
+        shell: pwsh
+        run: |
+          $TODAY = Get-Date -Format "yyyy-MM-dd"
+          echo "today=$TODAY" >> $env:GITHUB_OUTPUT
+          # 注意这里是连字符 -
+          echo "display_name=${{ github.ref_name }}-$TODAY" >> $env:GITHUB_OUTPUT
+
+      # 5. 提取 CHANGELOG 并强制加上日期（CHANGELOG 里写不写日期都无所谓）
+      - name: Extract Release Body from CHANGELOG.md
+        shell: pwsh
+        run: |
+          $TAG_NAME = "${{ github.ref_name }}"
+          $VERSION = $TAG_NAME.TrimStart("v")
+          $TODAY = "${{ steps.date_info.outputs.today }}"
+          $DISPLAY_TITLE = "${{ steps.date_info.outputs.display_name }}"
+          
+          if (Test-Path "CHANGELOG.md") {
+              $content = Get-Content -Path "CHANGELOG.md" -Raw
+              # 正则匹配 ## [1.0.0] 或 ## 1.0.0，内容截取到下一个 ## 之前
+              $pattern = "(?s)##\s*\[?$VERSION\]?.*?(?=\n##\s*\[|\Z)"
+              $match = [regex]::Match($content, $pattern)
+              if ($match.Success) {
+                  $body = $match.Value
+                  # 核心操作：无论 CHANGELOG 里写了什么日期，强制替换标题行为 "## v1.0.0-今天日期"
+                  $body = $body -replace "(?m)^##\s*\[?$VERSION\]?.*$", "## $DISPLAY_TITLE"
+                  $body | Out-File -FilePath "release_body.txt" -Encoding utf8
+              } else {
+                  "## $DISPLAY_TITLE`n`n未在 CHANGELOG.md 中找到版本 $VERSION 的更新说明。" | Out-File -FilePath "release_body.txt" -Encoding utf8
+              }
+          } else {
+              "## $DISPLAY_TITLE`n`nCHANGELOG.md 文件不存在，请手动编辑更新说明。" | Out-File -FilePath "release_body.txt" -Encoding utf8
+          }
+
+      # 6. 上传构建产物用于调试
+      - name: Upload Artifacts for Debugging
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: dist/
+
+      # 7. 正式发布（标题和正文都使用连字符日期格式）
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Release ${{ steps.date_info.outputs.display_name }}" # 👈 标题：Release v1.0.0-2026-09-26
+          body_path: release_body.txt
+          generate_release_notes: false
+          files: |
+            dist/devbugtools.exe
+            dist/devbugtools-${{ github.ref_name }}-win-folder.zip
+            dist/devbugtools.exe.sha256
