@@ -31,19 +31,25 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      # 1. 动态生成版本文件
+      # 健壮性极强的版本号生成，手动触发或带后缀的 Tag 都不会崩
       - name: Generate version file
         shell: pwsh
         run: |
           $TAG_NAME = "${{ github.ref_name }}"
           $VERSION = $TAG_NAME.TrimStart("v")
-          $VERSION = $VERSION -replace '[^0-9.]', ''
-          $VERSION_ARR = $VERSION.Split(".")
+          $VERSION = $VERSION -replace '[^0-9.]', '.'
+          $VERSION_ARR = $VERSION.Split(".") | Where-Object { $_ -ne "" }
+          while ($VERSION_ARR.Count -lt 3) { $VERSION_ARR += "0" }
+          $MAJOR = $VERSION_ARR[0]
+          $MINOR = $VERSION_ARR[1]
+          $PATCH = $VERSION_ARR[2]
+          $BUILD = if ($VERSION_ARR.Count -gt 3 -and $VERSION_ARR[3] -match '^\d+$') { $VERSION_ARR[3] } else { "0" }
+          
           $VERSION_TXT = @"
           VSVersionInfo(
             ffi=FixedFileInfo(
-              filevers=($($VERSION_ARR[0]), $($VERSION_ARR[1]), $($VERSION_ARR[2]), 0),
-              prodvers=($($VERSION_ARR[0]), $($VERSION_ARR[1]), $($VERSION_ARR[2]), 0)
+              filevers=($MAJOR, $MINOR, $PATCH, $BUILD),
+              prodvers=($MAJOR, $MINOR, $PATCH, $BUILD)
             ),
             kids=[
               StringFileInfo([
@@ -63,7 +69,6 @@ jobs:
           "@
           Set-Content -Path version_info.txt -Value $VERSION_TXT -Encoding utf8
 
-      # 2. 打包（单文件 + 文件夹）
       - name: Build with PyInstaller (One-File)
         run: pyinstaller --noconsole --onefile --name devbugtools --add-data "assets;assets" --version-file version_info.txt main.py
 
@@ -74,7 +79,6 @@ jobs:
         shell: pwsh
         run: Compress-Archive -Path dist\devbugtools\* -DestinationPath dist\devbugtools-${{ github.ref_name }}-win-folder.zip
 
-      # 3. 产物校验 + SHA256
       - name: Verify Build Artifacts
         shell: pwsh
         run: |
@@ -85,17 +89,16 @@ jobs:
         shell: pwsh
         run: Get-FileHash dist\devbugtools.exe -Algorithm SHA256 | Select-Object Hash | Out-File -FilePath dist\devbugtools.exe.sha256 -Encoding ascii
 
-      # 4. 获取当前日期，生成发布名称（连字符格式 v1.0.0-2026-09-26）
+      # 获取当天日期，拼接标签，如 v1.0.0-2026-09-26
       - name: Get Release Date
         id: date_info
         shell: pwsh
         run: |
           $TODAY = Get-Date -Format "yyyy-MM-dd"
           echo "today=$TODAY" >> $env:GITHUB_OUTPUT
-          # 注意这里是连字符 -
           echo "display_name=${{ github.ref_name }}-$TODAY" >> $env:GITHUB_OUTPUT
 
-      # 5. 提取 CHANGELOG 并强制加上日期（CHANGELOG 里写不写日期都无所谓）
+      # 抓取 CHANGELOG 并强制替换标题行，不管你有没有写日期
       - name: Extract Release Body from CHANGELOG.md
         shell: pwsh
         run: |
@@ -106,12 +109,10 @@ jobs:
           
           if (Test-Path "CHANGELOG.md") {
               $content = Get-Content -Path "CHANGELOG.md" -Raw
-              # 正则匹配 ## [1.0.0] 或 ## 1.0.0，内容截取到下一个 ## 之前
               $pattern = "(?s)##\s*\[?$VERSION\]?.*?(?=\n##\s*\[|\Z)"
               $match = [regex]::Match($content, $pattern)
               if ($match.Success) {
                   $body = $match.Value
-                  # 核心操作：无论 CHANGELOG 里写了什么日期，强制替换标题行为 "## v1.0.0-今天日期"
                   $body = $body -replace "(?m)^##\s*\[?$VERSION\]?.*$", "## $DISPLAY_TITLE"
                   $body | Out-File -FilePath "release_body.txt" -Encoding utf8
               } else {
@@ -121,7 +122,6 @@ jobs:
               "## $DISPLAY_TITLE`n`nCHANGELOG.md 文件不存在，请手动编辑更新说明。" | Out-File -FilePath "release_body.txt" -Encoding utf8
           }
 
-      # 6. 上传构建产物用于调试
       - name: Upload Artifacts for Debugging
         if: always()
         uses: actions/upload-artifact@v4
@@ -129,11 +129,10 @@ jobs:
           name: build-artifacts
           path: dist/
 
-      # 7. 正式发布（标题和正文都使用连字符日期格式）
       - name: Create Release and Upload Assets
         uses: softprops/action-gh-release@v2
         with:
-          name: "Release ${{ steps.date_info.outputs.display_name }}" # 👈 标题：Release v1.0.0-2026-09-26
+          name: "Release ${{ steps.date_info.outputs.display_name }}"
           body_path: release_body.txt
           generate_release_notes: false
           files: |

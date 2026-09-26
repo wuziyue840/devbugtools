@@ -2,16 +2,16 @@ name: Dev Build (Test Only)
 
 on:
   push:
-    branches: [ master, main ] # 日常推送到主分支时触发
+    branches: [ master, main ]
   pull_request:
-    branches: [ master, main ] # 提交 PR 时也触发，保证代码质量
-  workflow_dispatch: # 允许手动点击运行
+    branches: [ master, main ]
+  workflow_dispatch:
 
 jobs:
   test-build:
     runs-on: windows-latest
     permissions:
-      contents: read # 测试构建不需要写权限，最小化权限
+      contents: read
 
     steps:
       - name: Checkout code
@@ -29,17 +29,16 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      # 测试构建的版本号：使用 0.0.0-ci 避免 Tag 逻辑报错
       - name: Generate test version file
         shell: pwsh
         run: |
-          $VERSION = "0.0.0-ci.${{ github.run_number }}"
-          $VERSION_ARR = $VERSION.Split(".")
+          $VERSION = "0.0.0.${{ github.run_number }}"
+          $BUILD = ${{ github.run_number }}
           $VERSION_TXT = @"
           VSVersionInfo(
             ffi=FixedFileInfo(
-              filevers=($($VERSION_ARR[0]), $($VERSION_ARR[1]), $($VERSION_ARR[2]), 0),
-              prodvers=($($VERSION_ARR[0]), $($VERSION_ARR[1]), $($VERSION_ARR[2]), 0)
+              filevers=(0, 0, 0, $BUILD),
+              prodvers=(0, 0, 0, $BUILD)
             ),
             kids=[
               StringFileInfo([
@@ -65,5 +64,5 @@ jobs:
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: devbugtools-test-build
+          name: devbugtools-test-build-${{ github.run_number }}
           path: dist/devbugtools.exe
