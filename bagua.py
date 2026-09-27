@@ -16,7 +16,7 @@ from tkinter import ttk
 from share import fortune_texts
 
 # 转盘尺寸与动画节奏
-WHEEL_SIZE = 340
+WHEEL_SIZE = 430        # 360 时底部的「坤」卦名会被画布边缘裁掉
 SPIN_TICKS = 26          # 转 26 拍，每拍延时递增，全程约 3 秒
 BASE_DELAY_MS = 30
 DELAY_STEP_MS = 6
@@ -79,7 +79,7 @@ class BaguaTab(ttk.Frame):
         head.pack(fill=tk.X, pady=(14, 0))
         ttk.Label(head, text="八卦盘 · 今日写码运势", font=self._fonts["title"],
                   anchor="center").pack(fill=tk.X)
-        ttk.Label(head, text=f"{date.today():%Y年%m月%d日} · 每日一签（今天内结果固定）",
+        ttk.Label(head, text=f"{date.today():%Y年%m月%d日} · 每日一签（今天内结果固定,仅供参考）",
                   font=self._fonts["small"], anchor="center").pack(fill=tk.X)
 
         self.wheel = tk.Canvas(self, width=WHEEL_SIZE, height=WHEEL_SIZE,
@@ -92,24 +92,29 @@ class BaguaTab(ttk.Frame):
 
         cards = ttk.Frame(self)
         cards.pack(fill=tk.X, padx=20)
-        self.build_card(cards, "网络风险天气", "#1677ff", "net")
-        self.build_card(cards, "代码屎山天气", "#8a6d3b", "code")
+        self.build_card(cards, "网络天气", "#1677ff", "net")
+        self.build_card(cards, "代码天气", "#8a6d3b", "code")
 
         self.var_advice = tk.StringVar(value=" ")
         ttk.Label(self, textvariable=self.var_advice, font=self._fonts["weather"],
                   foreground=RED, anchor="center").pack(fill=tk.X, pady=(12, 4))
 
     def build_card(self, parent, title, color, key):
-        card = ttk.LabelFrame(parent, text=title, padding=(12, 8))
-        card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=8)
+        """一张天气卡：白底细框，从上到下是「栏目名 → 天气名 → 判词」。"""
+        card = tk.Frame(parent, background="white", padx=14, pady=12,
+                        highlightthickness=1, highlightbackground="#ddd0b8")
+        card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True,
+                  padx=(0, 16) if key == "net" else (16, 0))
         weather = tk.StringVar(value="——")
         text = tk.StringVar(value="点「开始占卜」，看看今天写代码的运势")
         setattr(self, f"var_{key}_weather", weather)
         setattr(self, f"var_{key}_text", text)
+        ttk.Label(card, text=title, font=self._fonts["small"], background="white",
+                  foreground="#8a7a68").pack()
         ttk.Label(card, textvariable=weather, font=self._fonts["weather"],
-                  foreground=color, anchor="center").pack(fill=tk.X, pady=(0, 6))
-        ttk.Label(card, textvariable=text, wraplength=380, justify=tk.CENTER,
-                  anchor="center").pack(fill=tk.X)
+                  background="white", foreground=color).pack(pady=(8, 10))
+        ttk.Label(card, textvariable=text, font=self._fonts["body"], background="white",
+                  wraplength=430, justify=tk.CENTER).pack()
 
     # ==================== 八卦盘绘制 ====================
     def _draw_wheel(self):
@@ -144,9 +149,10 @@ class BaguaTab(ttk.Frame):
         c.create_oval(cx - 36, cy - 12, cx - 10, cy + 12, fill=PAPER, outline=INK)
         c.create_oval(cx + 10, cy - 12, cx + 36, cy + 12, fill=INK, outline=INK)
 
-        # 指针与卦名
-        c.create_polygon(cx - 10, cy - r_rim - 22, cx + 10, cy - r_rim - 22,
-                         cx, cy - r_rim + 2, fill=RED)
+        # 指针挂在盘外正上方（卦名圈的外侧），尖朝下指向转盘；
+        # 卦名文字圈从半径 170 开始，指针必须完全在它外面，不能压住「乾」字
+        c.create_polygon(cx - 9, cy - r_rim - 63, cx + 9, cy - r_rim - 63,
+                         cx, cy - r_rim - 33, fill=RED)
         for index, (name, _lines) in enumerate(TRIGRAMS):
             a = math.radians(self._wheel_angle + index * 45 - 90)
             x = cx + (r_rim + 20) * math.cos(a)

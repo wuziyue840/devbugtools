@@ -37,11 +37,11 @@ class ToolGUI:
         self.code = CodeCountTab(self.notebook)
         self.notebook.add(self.code, text="代码行数统计")
 
-        self.about = AboutTab(self.notebook)
-        self.notebook.add(self.about, text="关于")
-
         self.bagua = BaguaTab(self.notebook)
         self.notebook.add(self.bagua, text="八卦盘")
+
+        self.about = AboutTab(self.notebook)
+        self.notebook.add(self.about, text="关于")
 
 
 if __name__ == "__main__":
