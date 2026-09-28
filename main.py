@@ -8,6 +8,7 @@ import ctypes
 
 from port_scan import PortScanTab
 from code_count import CodeCountTab
+from code_profile import CodeProfileTab
 from about import AboutTab
 from bagua import BaguaTab
 
@@ -36,6 +37,9 @@ class ToolGUI:
 
         self.code = CodeCountTab(self.notebook)
         self.notebook.add(self.code, text="代码行数统计")
+
+        self.profile = CodeProfileTab(self.notebook)
+        self.notebook.add(self.profile, text="代码成分表")
 
         self.bagua = BaguaTab(self.notebook)
         self.notebook.add(self.bagua, text="八卦盘")
