@@ -189,6 +189,52 @@ def build_profile(rows):
     return loc_engine.summarize(rows)
 
 
+# ==================== 未识别扩展名（供"下一轮补表"用） ====================
+UNKNOWN_EXT_LABEL = "(无扩展名)"
+
+
+def unknown_extensions(rows, limit=10):
+    """被当成「纯文本」、且确实不在已知表里的扩展名（含无扩展名），按文件数排序。
+
+    返回 {"top": [(扩展名, 文件数), ...], "kinds": 种类数, "files": 文件总数}。
+
+    这条提示的用途是"告诉我们下一轮该往 loc_langs 补什么"，所以必须把
+    **"我们没认出来"** 与 **"本来就是纯文本"**（.txt / .log / .lock …）分开，
+    否则每个项目都会报出一堆 .txt，提示就没人看了。
+    """
+    counts = {}
+    for row in rows:
+        if row.get("language") != loc_langs.PLAIN_TEXT_LANG:
+            continue                      # 已识别的语言（含外部分类）不算未识别
+        name = os.path.basename(row.get("path") or "").lower()
+        if not name:
+            continue
+        ext = os.path.splitext(name)[1]
+        if ext and ext in loc_langs.PLAIN_TEXT_EXT:
+            continue                      # 本来就是纯文本，不是漏认
+        if not ext and name in loc_langs.FILENAMES:
+            continue                      # 特殊文件名表已覆盖
+        key = ext or UNKNOWN_EXT_LABEL
+        counts[key] = counts.get(key, 0) + 1
+
+    ordered = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    return {
+        "top": ordered[:limit],
+        "kinds": len(ordered),
+        "files": sum(counts.values()),
+    }
+
+
+def unknown_summary(data, limit=3):
+    """把 unknown_extensions 的结果压成一句话（没东西时返回空串，供界面判断）。"""
+    if not data or not data.get("files"):
+        return ""
+    shown = data["top"][:limit]
+    items = "、".join(f"{ext}×{count}" if count > 1 else ext for ext, count in shown)
+    suffix = f" 等 {data['kinds']} 种" if data["kinds"] > len(shown) else ""
+    return f"未识别 {data['files']} 个文件（{items}{suffix}）"
+
+
 # ==================== 精确层（可选：lizard） ====================
 def lizard_available():
     try:

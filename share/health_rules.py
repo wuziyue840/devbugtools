@@ -92,16 +92,49 @@ _BATCH = (
 
 _C_STYLE_LANGS = {
     "C", "C/C++ 头文件", "C++", "C#", "Java", "Kotlin", "Swift", "Go",
-    "Rust", "Dart", "Scala", "PHP", "Objective-C", "Groovy", "Vue",
-    "Astro", "Svelte", "JavaScript", "TypeScript", "Less", "SCSS",
+    "Rust", "Dart", "Scala", "PHP", "Objective-C", "Objective-C++", "Groovy",
+    "Vue", "Astro", "Svelte", "JavaScript", "TypeScript", "Less", "SCSS",
     "Stylus", "JSONC", "JSON5", "Protocol Buffers",
+    # 后续扩充：同样是"花括号 + if/for/while/case"形态的语言
+    "D", "Zig", "Solidity", "Haxe", "Vala", "Odin", "ReScript", "Gleam",
+    "Crystal", "Verilog", "SystemVerilog", "HCL", "Nix", "Starlark",
 }
-_WORDY_LANGS = {"Python", "Ruby", "Perl", "Shell", "PowerShell", "Lua", "R"}
+_WORDY_LANGS = {
+    "Python", "Ruby", "Perl", "Shell", "PowerShell", "Lua", "R",
+    # 后续扩充：关键字式语言
+    "Awk", "Ada", "COBOL", "Clojure", "CoffeeScript", "Elixir", "Elm",
+    "Erlang", "F#", "Fortran", "Haskell", "Julia", "Lisp", "Nim", "OCaml",
+    "Pascal", "Prolog", "PureScript", "Raku", "Rexx", "Tcl", "Visual Basic",
+    "VHDL", "Puppet", "CMake", "Meson",
+    # 模板语言：{% if %} / {{#if}} / <% if %> 这类语法正好命中词法系关键字
+    "ERB", "Haml", "Handlebars", "JSP", "Jinja", "Liquid", "Pug", "Quarto",
+    "R Markdown", "Razor", "Twig",
+}
 
 BRANCH_BY_LANG = {lang: _C_STYLE for lang in _C_STYLE_LANGS}
 BRANCH_BY_LANG.update({lang: _WORDY for lang in _WORDY_LANGS})
 BRANCH_BY_LANG["SQL"] = _SQL
 BRANCH_BY_LANG["Batch"] = _BATCH
+
+# 显式列出"不参与分支 / 嵌套 / 重复三个维度"的语言：标记、样式、数据、锁文件、
+# 构建脚本等。**它必须与 loc_langs.all_language_names() 减去 BRANCH_BY_LANG
+# 的结果完全相等** —— 这条由自测断言把关，往 loc_langs 加语言却忘了在这里归类
+# 会直接让测试红灯，而不是静默少算三个维度。
+NON_CODE_LANGS = {
+    # 标记 / 数据 / 配置
+    "AsciiDoc", "BibTeX", "CSS", "EditorConfig", "GraphQL", "HTML", "INI",
+    "JSON", "Jupyter Notebook", "MDX", "Markdown", "Org", "PostCSS",
+    "Properties", "SVG", "Sass", "TOML", "TeX", "Vim Script", "XAML", "XML",
+    "YAML", "reStructuredText",
+    # 构建 / 工具链 / 点文件
+    "Bazel RC", "Dockerfile", "Go Module", "Just", "Lock 文件", "Makefile",
+    "Procfile", "Registry", "dockerignore", "env", "gitattributes",
+    "gitconfig", "gitignore", "gitkeep", "ignore 文件", "mailmap", "npmrc",
+    # 汇编与图表描述：分支指令形态太杂，硬检测会误伤
+    "Assembly", "D2", "Linker Script", "Mermaid", "PlantUML", "HTTP 请求",
+    # 兜底语言（未知扩展名一律落在这里）
+    "纯文本",
+}
 
 _TODO_RE = re.compile(r"\b(TODO|FIXME|HACK|XXX|BUG)\b", re.IGNORECASE)
 

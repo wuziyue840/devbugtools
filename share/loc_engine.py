@@ -174,15 +174,36 @@ def count_file_lexical(path):
 # 实测反例：Pygments 的 Markdown 词法器不认 HTML 注释（<!-- -->），
 # Batch 词法器不认 "::" 注释 —— 这两类用内置表反而更准。所以词法模式
 # 对这些后缀直接走轻量逻辑，保证词法模式不会在某些语言上倒退。
+#
+# 同样走轻量逻辑的还有一整类**模板 / 标记语言**（.twig/.jinja/.hbs/.pug/
+# .cshtml/.razor/.erb/.jsp/.haml/.liquid/.mustache/.j2 与 .md/.mdx/.html 等）：
+# 它们正文是标记、注释语法又是另一套，逐行判定反而更稳。
 LEXICAL_PREFERRED = {
-    ".py", ".pyi", ".pyw",
+    # 脚本
+    ".py", ".pyi", ".pyw", ".rb", ".pl", ".r", ".lua", ".rkt", ".raku", ".p6",
+    ".ex", ".exs", ".erl", ".hrl", ".jl", ".nim", ".nims", ".cr", ".coffee",
+    ".clj", ".cljs", ".cljc", ".edn", ".lisp", ".el", ".scm", ".pro", ".awk",
+    # JS / TS 家族
     ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs",
     ".vue", ".svelte", ".astro",
-    ".rs", ".go", ".cs", ".java", ".kt", ".swift", ".scala", ".dart",
-    ".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".m", ".mm",
-    ".php", ".rb", ".pl", ".lua",
+    # C 系与相邻语言
+    ".rs", ".go", ".cs", ".java", ".kt", ".kts", ".swift", ".scala", ".dart",
+    ".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx", ".m", ".mm",
+    ".php", ".groovy", ".gradle", ".d", ".zig", ".sol", ".hx", ".vala",
+    ".vapi", ".odin", ".res", ".resi", ".gleam", ".purs",
+    # 函数式
+    ".hs", ".lhs", ".ml", ".mli", ".fs", ".fsi", ".fsx", ".elm",
+    # 硬件 / 构建 / 基础设施
+    ".v", ".vh", ".sv", ".svh", ".vhd", ".vhdl", ".asm", ".s",
+    ".cmake", ".meson", ".bzl", ".bazel", ".nix", ".tf", ".tfvars", ".hcl",
+    ".pp", ".ld", ".lds",
+    # 其它语言
+    ".pas", ".cob", ".cbl", ".vb", ".vbs", ".adb", ".ads", ".tcl",
+    ".f", ".for", ".f77", ".f90", ".f95", ".f03", ".f08",
+    # Shell 家族
     ".sh", ".bash", ".zsh", ".ps1", ".psm1",
-    ".sql", ".css", ".less", ".scss", ".styl",
+    # 结构化
+    ".sql", ".psql", ".plsql", ".css", ".pcss", ".less", ".scss", ".styl",
     ".json", ".jsonc", ".json5", ".yaml", ".yml", ".toml", ".ini", ".proto",
 }
 

@@ -87,6 +87,7 @@ class CodeProfileTab(ToolTab):
         self.precise_rows = []
         self.precise_note = ""
         self.index = None
+        self.unknown = {"top": [], "kinds": 0, "files": 0}
         self.failed = []
         self.analyze_started = time.perf_counter()
         self.scanned_at = ""
@@ -517,6 +518,7 @@ class CodeProfileTab(ToolTab):
         self.precise_rows = []
         self.precise_note = ""
         self.index = None
+        self.unknown = {"top": [], "kinds": 0, "files": 0}
         self.failed = []
         self.scanned_at = ""
         self.clear_all_tables()
@@ -622,6 +624,7 @@ class CodeProfileTab(ToolTab):
 
         self.index = health_engine.build_index(self.file_rows, extra=self.extra,
                                                precise=agg, snark=self.var_snark.get())
+        self.unknown = health_engine.unknown_extensions(self.file_rows)
         self.scanned_at = datetime.now().strftime("%Y-%m-%d %H:%M")
         self.build_dim_rows()
         self.switch_view(self.view_mode, refresh=False)
@@ -640,6 +643,9 @@ class CodeProfileTab(ToolTab):
             parts.append(f"（{self.enum_result.mode_summary()}）")
         if self.precise_note:
             parts.append(self.precise_note)
+        unknown_text = health_engine.unknown_summary(self.unknown)
+        if unknown_text:
+            parts.append(unknown_text)
         if self.failed:
             parts.append(f"有 {len(self.failed)} 个文件读不了，可点「重试失败项」")
         self.set_status(" · ".join(parts))
@@ -849,8 +855,14 @@ class CodeProfileTab(ToolTab):
             extra.append(cover)
         if self.precise_note:
             extra.append(self.precise_note)
-        self.card.create_text(x0, foot_y, text=" · ".join(extra), anchor="nw",
-                              font=self._fonts["small"], fill=palette["ink_soft"])
+        unknown_text = health_engine.unknown_summary(self.unknown)
+        if unknown_text:
+            extra.append(unknown_text)
+        self.card.create_text(x0, foot_y,
+                              text=self._ellipsis(" · ".join(extra),
+                                                  self._fonts["small"], x1 - x0),
+                              anchor="nw", font=self._fonts["small"],
+                              fill=palette["ink_soft"])
 
     def _comment_rate_text(self, stats):
         non_blank = stats.get("non_blank", 0)
@@ -858,6 +870,13 @@ class CodeProfileTab(ToolTab):
             return ""
         rate = stats.get("comment", 0) * 100.0 / non_blank
         return f"注释率 {rate:.1f}%（占非空行）"
+
+    def _unknown_notice_html(self):
+        """导出卡片里的「未识别扩展名」一行；没有未识别时不产生任何节点。"""
+        text = health_engine.unknown_summary(self.unknown)
+        if not text:
+            return ""
+        return f'<div class="notice">未识别扩展名：{html.escape(text)}</div>'
 
     def _draw_dimension_strip(self, x0, x1, y0):
         """底部七维小条：每条是「维度名 + 子分 + 子分条」，颜色取该档的等级色。"""
@@ -991,6 +1010,15 @@ class CodeProfileTab(ToolTab):
         for dim in index["dimensions"]:
             lines.append(f"| {dim['name']} | {dim['raw_text']} | {dim['unit']} | "
                          f"{dim['normalized']} | {dim['weight']} | {dim['note']} |")
+        if self.unknown.get("files"):
+            lines += ["", "## 未识别扩展名", "",
+                      "这些文件目前按「纯文本」统计（没有注释语法）：", "",
+                      "| 扩展名 | 文件数 |", "| --- | ---: |"]
+            for ext, count in self.unknown["top"]:
+                lines.append(f"| {ext} | {count} |")
+            rest = self.unknown["kinds"] - len(self.unknown["top"])
+            if rest > 0:
+                lines.append(f"| 其他 {rest} 种 | … |")
         lines += ["", f"> {index['overall']}", "",
                   f"*由 {APP_NAME} {APP_VERSION} 生成*", ""]
         return "\n".join(lines)
@@ -1141,6 +1169,7 @@ class CodeProfileTab(ToolTab):
       </div>
       <div class="notice">文件 {stats.get('files', 0)} 个 · 总行 {stats.get('total', 0)} 行 ·
         {esc(self._comment_rate_text(stats))}</div>
+      {self._unknown_notice_html()}
     </div>
   </div>
 

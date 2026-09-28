@@ -48,7 +48,7 @@ share/             非功能组件（公共部件与纯逻辑，不含界面功�
 │                      滚动条按需显示/列宽自适应/CSV 导出/复制/右键菜单
 ├── ignore_rules.py    文件枚举与忽略：git 清单、黑名单剪枝、二进制嗅探、安全阀
 ├── fortune_texts.py   八卦盘句子库（细分类词料 + 组合展开，≥500 条/池）
-├── loc_langs.py       扩展名 → 语言名 + 注释语法表
+├── loc_langs.py       扩展名 → 语言名 + 注释语法表（133 种语言 / 194 个扩展名 / 75 个特殊文件名）
 ├── loc_engine.py      统计引擎：内置（轻量/词法）+ scc/tokei/cloc 适配
 ├── health_rules.py    成分表口径表：维度/阈值/权重/等级带/配色（唯一来源）
 ├── health_texts.py    成分表文案池：严肃版 + 毒舌版
@@ -117,6 +117,21 @@ share/             非功能组件（公共部件与纯逻辑，不含界面功�
 - **纯目录名**（如 `node_modules`）：不分层级，**所有目标**里同名的目录都排除
 - **带分隔符的相对路径**（如 `sub\node_modules`）：**对每个目标各自解析**，也就是每个目标下的 `sub\node_modules` 都排除
 
+### 语言识别范围
+
+两页共用 `share/loc_langs.py` 这一张表：**133 种语言 / 194 个扩展名 / 75 个特殊文件名**（`CMakeLists.txt`、`Jenkinsfile`、`Vagrantfile`、`go.mod`、`.clang-format`、各类 `.prettierrc`/`ignore` 都在内），覆盖主流语言与工具链：
+
+- 脚本与通用：Python、Ruby、Perl、Shell、PowerShell、Lua、Tcl、Awk、Raku、Elixir、Erlang、Julia、Nim、Crystal、CoffeeScript、Clojure、Lisp、Prolog
+- C 系与相邻：C/C++/C#、Java、Kotlin、Swift、Go、Rust、Dart、Scala、PHP、Objective-C(++)、Groovy、D、Zig、Solidity、Haxe、Vala、Odin、ReScript、Gleam
+- 函数式：Haskell、OCaml、F#、Elm、PureScript
+- 硬件与基础设施：Verilog、SystemVerilog、VHDL、Assembly、CMake、Meson、Starlark/Bazel、Nix、Terraform HCL、Puppet
+- 标记与样式：HTML/XML/XAML/SVG、CSS/Less/SCSS/Sass/Stylus/PostCSS、Markdown/MDX、reStructuredText、AsciiDoc、Org、TeX/BibTeX
+- 模板：Razor、JSP、ERB、Twig、Jinja、Handlebars、Liquid、Pug、Haml
+- 数据与配置：JSON(C/5)、YAML、TOML、INI、Properties、.env（`*.env.*` 任意后缀）、Dockerfile、Makefile、锁文件、各类 rc / ignore
+- 其它：SQL 各方言、Protocol Buffers、GraphQL、Fortran、Ada、Pascal、COBOL、Visual Basic、Registry、Linker Script、PlantUML/Mermaid/D2
+
+`.env` 走前缀规则（`.env`、`.env.local`、`.env.production`… 都能认）；以点开头的点文件（`.gitignore` 这类）`os.path.splitext` 会说"没有扩展名"，只能靠特殊文件名表认，遇到新的工具链就往表里补一行。
+
 ## 功能页 3：代码成分表 + 屎山指数
 
 一句话：把代码库拆成一张**成分表**（语言成分 + 行成分），再打一个 **0–100 的屎山指数**（越高越烂），并给出一张可以截图发出去的卡片。
@@ -134,6 +149,22 @@ share/             非功能组件（公共部件与纯逻辑，不含界面功�
 - 「导出分享卡片」生成**自包含 HTML**（内联 CSS/SVG、零外链、零脚本，断网可打开、可截图、可贴 issue）；
 - 读不了的文件（被占用/无权限）单独归类，「重试失败项(N)」只重跑这几个；
 - 本页**默认不写盘**：只有你亲自点导出、选定了保存位置，才会写下那一个文件。
+
+### 「未识别扩展名」提示
+
+扫描结束后，如果还有文件被归成「纯文本」**且确实不在语言表里**，状态栏、成分表卡底部、导出的 HTML 与 Markdown 会各报一句，例如：
+
+```
+未识别 3 个文件（.foobar×2、.mylang 等 2 种）
+```
+
+它的用途是**告诉你下一轮该往 `share/loc_langs.py` 补什么**，所以刻意把两类分开：
+
+- `.txt` / `.log` / `.lock` / `.tsbuildinfo` 这些**本来就是纯文本**的，不算"未识别"（否则每个项目都会报一堆 `.txt`，提示就没人看了）；
+- 已识别的语言（`.md`、`.json`、`.gitignore`、`cargo.lock`…）也不算；
+- `LICENSE`、`README`、`CHANGELOG` 这类**无扩展名的通用文本**已登记成"纯文本"，同样不报；剩下真正没见过的（含没有扩展名的文件）才会列出来。
+
+没有未识别文件时，这几处**一句都不显示**，不占地方。
 
 ### 引擎
 
@@ -456,6 +487,9 @@ rm -f ~/.config/StarBoxTools/settings.json ~/.config/StarBoxTools/prefs.json
 - **启发式的已知偏差**：分支泥潭统计的是关键字命中，字符串/宏里的 `if`、模板里的分支会被算进去；嵌套级数是按缩进推断的，压缩风格、把多个语句写一行、制表符与空格混用都会让它偏离真实控制流深度；重复行只做**文件内**检测，跨文件的复制粘贴不会计入。
 - **精确层（lizard）与外部引擎（scc / tokei）未做真机验证**（本机未安装）。未安装时会在下拉框标注并拒绝启动，不会静默出错；`fuck-u-code` / `Sweet` 的输出格式本页**暂未适配**，选中会明确提示改用内置引擎。
 - **成分表页不写盘**：不参与 `settings.json` / `prefs.json` 的读写（避免与统计页互相覆盖配置），所有控件状态都在内存里，关掉即回到默认；页面上的「导出CSV/导出分享卡片」才会写你亲自选定的那个文件。
+- **多义扩展名只能取一个**：`.v` 取 Verilog（不是 Coq）、`.d` 取 D（不是 make 依赖文件）、`.pp` 取 Puppet（不是 Free Pascal）、`.m` 取 Objective-C（不是 MATLAB）、`.s` 取汇编（不是 S 语言）、`.pro` 取 Prolog（不是 Qt 工程文件）。取的是"更常见的那一个"，遇到反例请自己按语言名筛选或分批统计。
+- **新加语言必须同步归类**：`share/loc_langs.py` 里出现过的每个语言名，都必须落在 `share/health_rules.py` 的 `BRANCH_BY_LANG`（编程语言，参与分支/嵌套/重复三维）或 `NON_CODE_LANGS`（标记、数据、锁文件等，明确不参与）其中之一。只往 `loc_langs` 加语言而忘了归类，会让该语言在成分表页**静默少算三个维度** —— 所以自测里有一条断言专门盯这个（两集合无交集，且并集恰好等于表里全部语言名）。
+- 未识别（不在语言表里）的文件按**纯文本**统计，没有注释语法；用成分表页的「未识别扩展名」提示可以定位到具体是哪些扩展名。
 
 ## 性能
 
