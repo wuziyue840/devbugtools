@@ -19,7 +19,7 @@ class ToolGUI:
         self.root.title("devbugtools")
 
         win_w = 1200
-        win_h = 900
+        win_h = 1200
         self.root.geometry(f"{win_w}x{win_h}")
         scr_w = self.root.winfo_screenwidth()
         scr_h = self.root.winfo_screenheight()

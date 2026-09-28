@@ -62,8 +62,17 @@ DIM_HEADINGS = (
     ("note", "点评", 560),
 )
 
-# 卡片尺寸
-CARD_HEIGHT = 342
+# 卡片尺寸与分区
+CARD_HEIGHT = 372          # 初始高度（首次布局时手动摆一次分隔条）
+                           # 取 372 是为了让默认高度下"三行图例 + 底部信息行"
+                           # （含未识别扩展名提示）都放得下，不被挤掉
+CARD_MIN_HEIGHT = 150      # Canvas 的请求高度 = 这张卡能被拖到的最小高度
+CARD_HEADER_H = 84         # 标题 + 指数 + 分隔线的下限（实际由指数块高度决定）
+CARD_STRIP_BLOCK = 49      # 七维小条本身的高度（标题行 + 小条行 + 占比条）
+CARD_STRIP_GAP = 16        # 小条与上面两栏之间的留白
+CARD_BOTTOM_MARGIN = 18    # 小条与卡片下边缘之间的留白（不然就是"贴地"）
+CARD_BODY_MIN_H = 100      # 中间两栏至少要这么高，否则走"简短版"
+CARD_CENTER_MAX = 40       # 垂直居中时最多下移多少（免得内容飘到中间）
 CARD_MARGIN = 20
 
 
@@ -117,77 +126,102 @@ class CodeProfileTab(ToolTab):
         make("tiny", -2)
 
     def build_ui(self):
+        # 先把底部（总结行 + 状态栏）占住，再放可拖容器。
+        # 反过来的话：容器"请求的高度"是所有窗格之和，pack 会先满足它，
+        # 排在它后面的这两行就被挤成 0 高 —— 界面上直接消失。
+        foot = ttk.Frame(self)
+        foot.pack(side=tk.BOTTOM, fill=tk.X)
+        self.build_summary(foot)
+        self.make_status_bar(foot)
+
         self.build_control_bar()
         self.build_option_bar()
         self.build_workspace()
-        self.build_summary()
-        self.make_status_bar(self)
 
     def build_control_bar(self):
+        """引擎与启动按钮单独一行（窄窗口下不会挤到屏幕外）。"""
         box = ttk.Frame(self)
         box.pack(fill=tk.X, padx=6, pady=(6, 3))
 
-        row1 = ttk.Frame(box)
-        row1.pack(fill=tk.X)
-        ttk.Label(row1, text="扫描目标:").pack(side=tk.LEFT)
-        ttk.Button(row1, text="添加目录", width=9,
-                   command=self.pick_dir).pack(side=tk.LEFT, padx=(6, 3))
-        ttk.Button(row1, text="添加文件", width=9,
-                   command=self.pick_files).pack(side=tk.LEFT, padx=3)
-        ttk.Button(row1, text="填入本工具目录", width=15,
-                   command=self.fill_default).pack(side=tk.LEFT, padx=3)
-        ttk.Button(row1, text="删除选中", width=9,
-                   command=self.del_targets).pack(side=tk.LEFT, padx=3)
-        ttk.Button(row1, text="清空", width=7,
-                   command=self.clear_targets).pack(side=tk.LEFT, padx=3)
-
-        ttk.Label(row1, text="引擎:").pack(side=tk.LEFT, padx=(16, 0))
+        row = ttk.Frame(box)
+        row.pack(fill=tk.X)
+        ttk.Label(row, text="引擎:").pack(side=tk.LEFT)
         labels = [self.engine_label(e) for e in self.engine_ids]
         self.var_engine = tk.StringVar()
-        self.combo_engine = ttk.Combobox(row1, textvariable=self.var_engine,
+        self.combo_engine = ttk.Combobox(row, textvariable=self.var_engine,
                                          values=labels, state="readonly", width=26)
         self.combo_engine.current(0)
-        self.combo_engine.pack(side=tk.LEFT, padx=(4, 12))
+        self.combo_engine.pack(side=tk.LEFT, padx=(4, 10))
 
-        self.btn_run = ttk.Button(row1, text="开始分析", width=10, command=self.start_analyze)
+        self.btn_run = ttk.Button(row, text="开始分析", width=10, command=self.start_analyze)
         self.btn_run.pack(side=tk.LEFT, padx=(0, 3))
-        self.btn_stop = ttk.Button(row1, text="停止", width=7, command=self.stop_analyze,
+        self.btn_stop = ttk.Button(row, text="停止", width=7, command=self.stop_analyze,
                                    state="disabled")
         self.btn_stop.pack(side=tk.LEFT)
         # 只有真出现读不了的文件才显示，平时不占位置
-        self.btn_retry = ttk.Button(row1, text="重试失败项", width=13, command=self.retry_failed)
+        self.btn_retry = ttk.Button(row, text="重试失败项", width=13, command=self.retry_failed)
 
-        body = ttk.Frame(box)
-        body.pack(fill=tk.X, pady=(4, 0))
+    def build_target_area(self, parent):
+        """扫描目标面板（按钮行 + 列表），作为独立窗格交给 PanedWindow 管高度。"""
+        frame = ttk.Frame(parent)
+        head = ttk.Frame(frame)
+        head.pack(fill=tk.X)
+        ttk.Label(head, text="扫描目标:").pack(side=tk.LEFT)
+        ttk.Button(head, text="添加目录", width=9,
+                   command=self.pick_dir).pack(side=tk.LEFT, padx=(6, 3))
+        ttk.Button(head, text="添加文件", width=9,
+                   command=self.pick_files).pack(side=tk.LEFT, padx=3)
+        ttk.Button(head, text="填入本工具目录", width=15,
+                   command=self.fill_default).pack(side=tk.LEFT, padx=3)
+        ttk.Button(head, text="删除选中", width=9,
+                   command=self.del_targets).pack(side=tk.LEFT, padx=3)
+        ttk.Button(head, text="清空", width=7,
+                   command=self.clear_targets).pack(side=tk.LEFT, padx=3)
+
+        body = ttk.Frame(frame)
+        body.pack(fill=tk.BOTH, expand=True, pady=(3, 0))
         self.list_targets = tk.Listbox(body, height=3, selectmode="extended")
         sb = ttk.Scrollbar(body, orient="vertical", command=self.list_targets.yview)
         self.list_targets.configure(yscrollcommand=sb.set)
         self.list_targets.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         sb.pack(side=tk.RIGHT, fill=tk.Y)
+        return frame
+
+    def build_exclude_area(self, parent):
+        """排除目录面板（按钮行 + 列表 + 说明），同样交给 PanedWindow 管高度。"""
+        frame = ttk.Frame(parent)
+        head = ttk.Frame(frame)
+        head.pack(fill=tk.X)
+        ttk.Label(head, text="排除目录:").pack(side=tk.LEFT)
+        ttk.Button(head, text="添加目录", width=9,
+                   command=self.add_exclude).pack(side=tk.LEFT, padx=(6, 3))
+        ttk.Button(head, text="填入 git 忽略项", width=15,
+                   command=self.fill_git_ignored).pack(side=tk.LEFT, padx=3)
+        ttk.Button(head, text="删除选中", width=9,
+                   command=self.del_exclude).pack(side=tk.LEFT, padx=3)
+        ttk.Button(head, text="清空", width=7,
+                   command=self.clear_excludes).pack(side=tk.LEFT, padx=3)
+
+        body = ttk.Frame(frame)
+        body.pack(fill=tk.BOTH, expand=True, pady=(3, 0))
+        self.list_excludes = tk.Listbox(body, height=2, selectmode="extended")
+        sb = ttk.Scrollbar(body, orient="vertical", command=self.list_excludes.yview)
+        self.list_excludes.configure(yscrollcommand=sb.set)
+        self.list_excludes.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        sb.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # 这句说明单独占一行：跟在按钮后面会把那一行撑爆
+        ttk.Label(frame, text="（黑名单遍历时生效；git 模式也按这里的条目排除）",
+                  font=self._fonts["small"]).pack(anchor="w", pady=(2, 0))
+        return frame
 
     def build_option_bar(self):
+        """视图筛选一行、复制导出一行，避免横向溢出。"""
         box = ttk.Frame(self)
         box.pack(fill=tk.X, padx=6, pady=(0, 4))
 
-        row1 = ttk.Frame(box)
-        row1.pack(fill=tk.X)
-        ttk.Label(row1, text="排除目录:").pack(side=tk.LEFT)
-        ttk.Button(row1, text="添加目录", width=9,
-                   command=self.add_exclude).pack(side=tk.LEFT, padx=(6, 3))
-        ttk.Button(row1, text="填入 git 忽略项", width=15,
-                   command=self.fill_git_ignored).pack(side=tk.LEFT, padx=3)
-        ttk.Button(row1, text="删除选中", width=9,
-                   command=self.del_exclude).pack(side=tk.LEFT, padx=3)
-        ttk.Button(row1, text="清空", width=7,
-                   command=self.clear_excludes).pack(side=tk.LEFT, padx=3)
-        ttk.Label(row1, text="（黑名单遍历时生效；git 模式只按这里的条目排除）"
-                  ).pack(side=tk.LEFT, padx=(6, 0))
-
-        self.list_excludes = tk.Listbox(box, height=2, selectmode="extended")
-        self.list_excludes.pack(fill=tk.X, pady=(3, 0))
-
         row2 = ttk.Frame(box)
-        row2.pack(fill=tk.X, pady=(4, 0))
+        row2.pack(fill=tk.X)
         ttk.Label(row2, text="视图:").pack(side=tk.LEFT)
         self.var_view = tk.StringVar(value=self.view_mode)
         ttk.Radiobutton(row2, text="按语言", value=VIEW_LANG, variable=self.var_view,
@@ -207,23 +241,40 @@ class CodeProfileTab(ToolTab):
         self.var_snark = tk.BooleanVar(value=False)
         ttk.Checkbutton(row2, text="毒舌模式", variable=self.var_snark,
                         command=self.on_snark_changed).pack(side=tk.LEFT, padx=(12, 3))
-        ttk.Button(row2, text="复制选中", width=9,
-                   command=self.copy_selected).pack(side=tk.LEFT, padx=3)
-        ttk.Button(row2, text="复制Markdown", width=13,
+
+        # 复制与导出单独一行：跟筛选挤一起时，1200px 下「导出CSV」「导出分享卡片」会被推到屏外
+        row3 = ttk.Frame(box)
+        row3.pack(fill=tk.X, pady=(4, 0))
+        ttk.Button(row3, text="复制选中", width=9,
+                   command=self.copy_selected).pack(side=tk.LEFT, padx=(0, 3))
+        ttk.Button(row3, text="复制Markdown", width=13,
                    command=self.copy_markdown).pack(side=tk.LEFT, padx=3)
-        ttk.Button(row2, text="导出CSV", width=9,
+        ttk.Button(row3, text="导出CSV", width=9,
                    command=self.export_result).pack(side=tk.LEFT, padx=3)
-        ttk.Button(row2, text="导出分享卡片", width=13,
+        ttk.Button(row3, text="导出分享卡片", width=13,
                    command=self.export_card).pack(side=tk.LEFT, padx=3)
 
     def build_workspace(self):
-        """卡片与表格放进可拖动容器：卡片想大就往上拖分隔条，反之亦然。"""
+        """四块内容都放进可拖动容器：目标列表 / 排除列表 / 成分表卡 / 表格。
+
+        容器用 `ttk.PanedWindow`，和「代码行数统计」页同一个控件 —— 它的分隔条走主题
+        样式，是那条细细的凹槽；classic 的 `tk.PanedWindow` 会画出凸起的黑边，
+        在 ttk 界面里非常扎眼。
+
+        ttk 的窗格最小高度 = 子控件"请求的高度"，所以想让卡片能被拖小，
+        就得让 Canvas 的请求高度小一点（CARD_MIN_HEIGHT），初始的 342 由
+        首次布局时摆一次分隔条来实现（见 `_place_card_sash_once`）。
+        """
         pane = ttk.PanedWindow(self, orient="vertical")
-        pane.pack(fill=tk.BOTH, expand=True, padx=6, pady=(0, 4))
+        # 上下都要留白：pady=(0, 4) 时卡片上边缘直接贴着按钮行，看着就是"粘在一起"
+        pane.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
         self.pane = pane
 
+        pane.add(self.build_target_area(pane), weight=0)
+        pane.add(self.build_exclude_area(pane), weight=0)
+
         card_box = ttk.Frame(pane)
-        self.card = tk.Canvas(card_box, height=CARD_HEIGHT, highlightthickness=0,
+        self.card = tk.Canvas(card_box, height=CARD_MIN_HEIGHT, highlightthickness=0,
                               background=health_rules.PALETTE["paper"])
         self.card.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
         self.card.bind("<Configure>", lambda event: self.draw_card())
@@ -236,8 +287,16 @@ class CodeProfileTab(ToolTab):
         self.tree_file = self.make_table(self.frame_file, FILE_HEADINGS)
         self.frame_dim = ttk.Frame(holder)
         self.tree_dim = self.make_table(self.frame_dim, DIM_HEADINGS)
+        # 表格默认请求 10 行高，会让整条容器的"请求高度"虚高；给个小的初始值，
+        # 多出来的空间按 weight 补给表格（它是唯一 weight=1 的窗格）
+        for tree in (self.tree_lang, self.tree_file, self.tree_dim):
+            tree.configure(height=4)
         self.tree = self.tree_lang
         pane.add(holder, weight=1)
+
+        self._card_sash_placed = False
+        pane.bind("<Configure>", self._place_card_sash_once)
+        self.after_idle(self._place_card_sash_once)
 
         self.make_row_menu((
             ("复制该行", self.copy_selected),
@@ -259,6 +318,25 @@ class CodeProfileTab(ToolTab):
         """macOS 的 Tk 把右键上报为 Button-2，其余平台是 Button-3。"""
         return "<Button-2>" if sys.platform == "darwin" else "<Button-3>"
 
+    def _place_card_sash_once(self, event=None):
+        """首次布局时把卡片那条分隔条摆到 CARD_HEIGHT，之后完全交给用户拖。
+
+        为什么要手动摆一次：Canvas 的请求高度被压到 CARD_MIN_HEIGHT（这样卡片才能
+        被拖小），而 ttk 窗格的初始高度就等于子控件的请求高度 —— 不摆这一下，
+        卡片会以最小高度开场。只摆一次，用户拖过之后不再干预。
+        """
+        if self._card_sash_placed or self.pane is None:
+            return
+        try:
+            if self.pane.winfo_height() < 240:
+                return                    # 还没真正布局出来，等下一次 Configure
+            sashes = int(self.pane.cget("sashwidth")) if "sashwidth" in self.pane.keys() else 6
+            card_top = self.pane.sashpos(1)
+            self.pane.sashpos(2, card_top + sashes + CARD_HEIGHT)
+        except tk.TclError:
+            return
+        self._card_sash_placed = True
+
     def on_any_right_click(self, event):
         tree = event.widget
         item = tree.identify_row(event.y)
@@ -275,11 +353,11 @@ class CodeProfileTab(ToolTab):
                 tree.delete(item)
         self._item_rows = {}
 
-    def build_summary(self):
+    def build_summary(self, parent):
         self.var_summary = tk.StringVar(value="尚未分析")
-        self.label_summary = ttk.Label(self, textvariable=self.var_summary, anchor="w",
+        self.label_summary = ttk.Label(parent, textvariable=self.var_summary, anchor="w",
                                        justify=tk.LEFT)
-        self.label_summary.pack(fill=tk.X, padx=8, pady=(0, 3))
+        self.label_summary.pack(fill=tk.X, padx=8, pady=(2, 3))
         self.bind("<Configure>", lambda event: self.label_summary.configure(
             wraplength=max(event.width - 24, 240)))
 
@@ -717,7 +795,9 @@ class CodeProfileTab(ToolTab):
             return
         palette = health_rules.PALETTE
         width = max(canvas.winfo_width(), 480)
-        height = max(canvas.winfo_height(), CARD_HEIGHT)
+        # 用真实高度画（不再是"至少 342"）：卡片可以被拖小，画的内容得跟着缩，
+        # 否则会被 Canvas 裁掉一半。下限 120 只是防御还没布局好时的 1×1。
+        height = max(canvas.winfo_height(), 120)
         canvas.delete("all")
         canvas.create_rectangle(0, 0, width, height, fill=palette["paper"],
                                 outline=palette["border"])
@@ -730,7 +810,7 @@ class CodeProfileTab(ToolTab):
             return
 
         margin = CARD_MARGIN
-        title_y = 16
+        title_y = CARD_MARGIN - 2          # 与底部 CARD_BOTTOM_MARGIN 对称，卡片不"贴顶"
         canvas.create_text(margin, title_y, text="代码成分表", anchor="nw",
                            font=self._fonts["title"], fill=palette["ink"])
         subtitle = f"{self.project_label()} · {self.scanned_at} · {self.engine_label_plain()}"
@@ -738,42 +818,112 @@ class CodeProfileTab(ToolTab):
                            self._fonts["small"], width * 0.55), anchor="nw",
                            font=self._fonts["small"], fill=palette["ink_soft"])
 
-        self._draw_score(width - margin, title_y, margin)
-        divider_y = 84
+        self._draw_score(width - margin, title_y)
+        # 分隔线位置由指数块的实际高度决定：字体行高随 DPI 变，写死 84 会让
+        # 大数字和等级文字叠在一起（实测就是这里挤住了）
+        divider_y = max(CARD_HEADER_H, title_y + self._score_block_height() + 8)
         canvas.create_line(margin, divider_y, width - margin, divider_y,
                            fill=palette["border"])
+
+        # 中间两栏 + 底部小条：小条留出下边距（否则贴着卡片下边缘），
+        # 两栏的行距随可用高度舒展，剩下的富余再让整块垂直居中
+        body_top = divider_y + 18
+        strip_y = height - CARD_STRIP_BLOCK - CARD_BOTTOM_MARGIN
+        body_bottom = strip_y - CARD_STRIP_GAP
+        if body_bottom - body_top < CARD_BODY_MIN_H:
+            # 中间两栏放不下：能塞下七维小条就塞，再挤一句引导；
+            # 连小条都塞不下就只留标题与指数，绝不叠着画
+            if strip_y - (divider_y + 14) >= 18:
+                canvas.create_text(margin, divider_y + 14, anchor="nw",
+                                   font=self._fonts["small"], fill=palette["ink_soft"],
+                                   text="把这张卡往下拖一点，就能看到语言成分与行成分")
+            if strip_y >= divider_y + 12:
+                self._draw_dimension_strip(margin, width - margin, strip_y)
+            return
 
         left_x0 = margin
         left_x1 = int(width * 0.52)
         right_x0 = int(width * 0.56)
         right_x1 = width - margin
-        body_y = divider_y + 16
-        strip_y = height - 74
 
-        self._draw_language(left_x0, left_x1, body_y, strip_y - 14)
-        self._draw_lines(right_x0, right_x1, body_y, strip_y - 14)
+        budget = body_bottom - body_top
+        row_h, legend_h, bar_h = self._body_metrics(budget)
+        slack = budget - self._body_natural_height(row_h, legend_h, bar_h)
+        if slack > 0:
+            body_top += min(slack // 2, CARD_CENTER_MAX)      # 上下留白对称
+
+        self._draw_language(left_x0, left_x1, body_top, body_bottom, row_h)
+        self._draw_lines(right_x0, right_x1, body_top, body_bottom, legend_h, bar_h)
         self._draw_dimension_strip(margin, width - margin, strip_y)
 
-    def _draw_score(self, right_x, top_y, margin):
+    def _body_metrics(self, budget):
+        """按可用高度给两栏定行距/条高：空间富余就舒展，但不是无限放大。"""
+        line = self._fonts["small"].metrics("linespace")
+        if budget >= 300:
+            return line + 16, line + 12, 34
+        if budget >= 200:
+            return line + 11, line + 9, 28
+        return line + 8, line + 6, 22
+
+    def _body_natural_height(self, row_h, legend_h, bar_h):
+        """两栏"自然高度"（取较高的那一栏），用来算居中偏移。"""
+        section = self._fonts["section"].metrics("linespace")
+        line = self._fonts["small"].metrics("linespace")
+        title_h = section + 7
+        rows = len([r for r in self.lang_rows if r.get("code")])
+        rows = min(rows if rows else 1, 9)                    # 最多 8 种 + "其他"
+        lang_h = title_h + rows * row_h
+        lines_h = title_h + bar_h + 10 + 3 * legend_h + 6 + line
+        return max(lang_h, lines_h)
+
+    def _score_block_height(self):
+        """右上角指数块占的高度（标签 + 大数字 + 等级），按字体真实行高算。"""
+        if not self.index:
+            return 0
+        total = 0
+        for key in ("small", "score", "section"):
+            total += self._fonts[key].metrics("linespace") + 2
+        return total
+
+    def _draw_score(self, right_x, top_y):
+        """右上角的指数块：标签 / 大数字 / 等级，按字体真实行高依次往下排。
+
+        注意锚点用 `e`（右中）不是 `ne`：`e` 是垂直居中，这样"行中心 = 行顶 + 行高/2"
+        的算法才成立；用 `ne` 的话文字是从锚点往下铺的，会跟下一行压在一起。
+        """
         palette = health_rules.PALETTE
         index = self.index
         grade = index["grade"]
-        self.card.create_text(right_x, top_y, text="屎山指数", anchor="ne",
-                              font=self._fonts["small"], fill=palette["ink_soft"])
-        self.card.create_text(right_x, top_y + 16, text=str(index["score"]), anchor="ne",
-                              font=self._fonts["score"], fill=grade["color"])
-        self.card.create_text(right_x, top_y + 56,
-                              text=f"{grade['name']} · {index['grade_short']}",
-                              anchor="ne", font=self._fonts["section"], fill=grade["color"])
+        top = top_y
+        for key, text, color in (
+            ("small", "屎山指数", palette["ink_soft"]),
+            ("score", str(index["score"]), grade["color"]),
+            ("section", f"{grade['name']} · {index['grade_short']}", grade["color"]),
+        ):
+            font = self._fonts[key]
+            line = font.metrics("linespace")
+            self.card.create_text(right_x, top + line // 2, text=text, anchor="e",
+                                  font=font, fill=color)
+            top += line + 2
 
-    def _draw_language(self, x0, x1, y0, y1):
-        """语言成分：色块 + 语言名 + 占比 + 占比条（按代码行，Top 8 + 其他）。"""
+    def _draw_language(self, x0, x1, y0, y1, row_h):
+        """语言成分：色块 + 语言名 + 占比 + 占比条。
+
+        行距由调用方按可用高度算好传进来（字体行高 + 8~16），不再写死数字 ——
+        写死的 18px 比小字体行高（16px）还小，两行文字会直接贴在一起。
+        卡矮时减的是**行数**，不是行距。
+        """
         palette = health_rules.PALETTE
+        budget = max(y1 - y0, 1)
+        section = self._fonts["section"].metrics("linespace")
+        line = self._fonts["small"].metrics("linespace")
+        title_h = section + 7
+
         self.card.create_text(x0, y0, text="语言成分（按代码行）", anchor="nw",
                               font=self._fonts["section"], fill=palette["ink"])
         rows = [r for r in self.lang_rows if r.get("code")]
         if not rows:
-            self.card.create_text(x0, y0 + 30, text="没有可展示的语言成分",
+            self.card.create_text(x0, y0 + title_h, text="没有可展示的语言成分",
                                   anchor="nw", font=self._fonts["small"],
                                   fill=palette["ink_soft"])
             return
@@ -784,38 +934,48 @@ class CodeProfileTab(ToolTab):
         if rest:
             items.append(("其他 %d 种" % len(rest), sum(r["code"] for r in rest)))
 
-        row_h = 22
-        max_rows = max(1, int((y1 - y0 - 26) // row_h))
+        max_rows = max(1, int((budget - title_h) // row_h))
         items = items[:max_rows]
         bar_x0 = x0 + 108
         for i, (name, code) in enumerate(items):
-            y = y0 + 26 + i * row_h
+            y = y0 + title_h + i * row_h
             share = code * 100.0 / total_code if total_code else 0.0
-            self.card.create_rectangle(x0, y + 1, x0 + 10, y + 11,
-                                       fill=health_rules.lang_color(name),
-                                       outline=palette["border"])
-            self.card.create_text(x0 + 16, y + 6,
+            color = health_rules.lang_color(name)
+            self.card.create_rectangle(x0, y + (line - 10) // 2, x0 + 10,
+                                       y + (line - 10) // 2 + 10,
+                                       fill=color, outline=palette["border"])
+            self.card.create_text(x0 + 16, y + line // 2,
                                   text=self._ellipsis(name, self._fonts["small"], 84),
                                   anchor="w", font=self._fonts["small"], fill=palette["ink"])
-            self.card.create_text(x1, y + 6, text=f"{share:.1f}%", anchor="e",
+            self.card.create_text(x1, y + line // 2, text=f"{share:.1f}%", anchor="e",
                                   font=self._fonts["small"], fill=palette["ink_soft"])
-            self.card.create_rectangle(bar_x0, y + 12, x1, y + 17,
+            bar_y = y + line + 2
+            self.card.create_rectangle(bar_x0, bar_y, x1, bar_y + 5,
                                        fill=palette["track"], outline="")
             fill_w = int((x1 - bar_x0) * min(share, 100.0) / 100.0)
             if fill_w > 1:
-                self.card.create_rectangle(bar_x0, y + 12, bar_x0 + fill_w, y + 17,
-                                           fill=health_rules.lang_color(name), outline="")
+                self.card.create_rectangle(bar_x0, bar_y, bar_x0 + fill_w, bar_y + 5,
+                                           fill=color, outline="")
 
-    def _draw_lines(self, x0, x1, y0, y1):
-        """行成分：代码/注释/空 三段堆叠条 + 图例 + 体量。"""
+    def _draw_lines(self, x0, x1, y0, y1, legend_h, bar_h):
+        """行成分：代码/注释/空 三段堆叠条 + 图例 + 体量。
+
+        条高与图例行距同样由调用方按可用高度传进来（都 ≥ 字体行高），
+        放不下的行直接不画，而不是把行距压到比字还小。
+        """
         palette = health_rules.PALETTE
+        budget = max(y1 - y0, 1)
+        section = self._fonts["section"].metrics("linespace")
+        line = self._fonts["small"].metrics("linespace")
+        title_h = section + 7
         stats = self.index["stats"]
         total = max(stats.get("total", 0), 1)
+
         self.card.create_text(x0, y0, text="行成分", anchor="nw",
                               font=self._fonts["section"], fill=palette["ink"])
 
-        bar_y0 = y0 + 26
-        bar_y1 = bar_y0 + 26
+        bar_y0 = y0 + title_h
+        bar_y1 = bar_y0 + bar_h
         cursor = x0
         spans = (("code", stats.get("code", 0)), ("comment", stats.get("comment", 0)),
                  ("blank", stats.get("blank", 0)))
@@ -827,21 +987,27 @@ class CodeProfileTab(ToolTab):
             cursor += seg
         self.card.create_rectangle(x0, bar_y0, x1, bar_y1, outline=palette["border"])
 
+        legend_y = bar_y1 + 10
         labels = (("code", "有效代码"), ("comment", "注释"), ("blank", "空行"))
-        legend_y = bar_y1 + 14
         for i, (key, text) in enumerate(labels):
-            y = legend_y + i * 19
+            y = legend_y + i * legend_h
+            if y + legend_h > y1:
+                return                    # 放不下更多图例就不再画
             value = stats.get(key, 0)
-            self.card.create_rectangle(x0, y, x0 + 10, y + 10,
-                                       fill=health_rules.LINE_COLORS[key], outline="")
-            self.card.create_text(x0 + 16, y + 5, text=text, anchor="w",
+            self.card.create_rectangle(x0, y + (line - 10) // 2, x0 + 10,
+                                       y + (line - 10) // 2 + 10,
+                                       fill=health_rules.LINE_COLORS[key],
+                                       outline=palette["border"])
+            self.card.create_text(x0 + 16, y + line // 2, text=text, anchor="w",
                                   font=self._fonts["small"], fill=palette["ink"])
-            self.card.create_text(x1, y + 5,
+            self.card.create_text(x1, y + line // 2,
                                   text=f"{value} 行 · {value * 100.0 / total:.1f}%",
                                   anchor="e", font=self._fonts["small"],
                                   fill=palette["ink_soft"])
 
-        foot_y = legend_y + 3 * 19 + 6
+        foot_y = legend_y + len(labels) * legend_h + 6
+        if foot_y + line > y1:
+            return                        # 底部那行汇总只有真的放得下才画
         extra = [f"文件 {stats.get('files', 0)}", f"总行 {stats.get('total', 0)}"]
         cover = self._comment_rate_text(stats)
         if cover:
@@ -872,25 +1038,33 @@ class CodeProfileTab(ToolTab):
         return f'<div class="notice">未识别扩展名：{html.escape(text)}</div>'
 
     def _draw_dimension_strip(self, x0, x1, y0):
-        """底部七维小条：每条是「维度名 + 子分 + 子分条」，颜色取该档的等级色。"""
+        """底部七维小条：每条是「维度名 + 子分 + 子分条」，颜色取该档的等级色。
+
+        标题行与下面那排小条之间按字体行高留白 —— 以前写死 22px，比小字体行高
+        只多 6px，看着就是标题压在小条上。
+        """
         palette = health_rules.PALETTE
         dims = self.index["dimensions"]
+        label_line = self._fonts["small"].metrics("linespace")
+        chip_line = self._fonts["tiny"].metrics("linespace")
         self.card.create_text(x0, y0, text="维度子分（越高越差）", anchor="nw",
                               font=self._fonts["small"], fill=palette["ink_soft"])
         if not dims:
             return
+        chip_top = y0 + label_line + 8          # 标题行整体让开，再起小条那一行
+        bar_y = chip_top + chip_line + 5
         gap = 10
         chip_w = (x1 - x0 - gap * (len(dims) - 1)) / len(dims)
         for i, dim in enumerate(dims):
             cx0 = x0 + i * (chip_w + gap)
             cx1 = cx0 + chip_w
             color = health_rules.grade_for(int(round(dim["normalized"])))["color"]
-            self.card.create_text(cx0, y0 + 18,
+            self.card.create_text(cx0, chip_top + chip_line // 2,
                                   text=self._ellipsis(dim["name"], self._fonts["tiny"], chip_w),
                                   anchor="w", font=self._fonts["tiny"], fill=palette["ink"])
-            self.card.create_text(cx1, y0 + 18, text=f"{dim['normalized']:.0f}",
-                                  anchor="e", font=self._fonts["small"], fill=color)
-            bar_y = y0 + 32
+            self.card.create_text(cx1, chip_top + chip_line // 2,
+                                  text=f"{dim['normalized']:.0f}", anchor="e",
+                                  font=self._fonts["small"], fill=color)
             self.card.create_rectangle(cx0, bar_y, cx1, bar_y + 6,
                                        fill=palette["track"], outline="")
             fill_w = int(chip_w * min(dim["normalized"], 100.0) / 100.0)
