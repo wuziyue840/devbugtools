@@ -74,8 +74,7 @@ class CodeProfileTab(ToolTab):
         super().__init__(master, initial_status="就绪：加好扫描目标后点「开始分析」")
         self._fonts = {}
         self.optional = health_engine.detect_optional()
-        self.engine_ids = ["builtin", "builtin_precise", "scc", "tokei",
-                           "fuck_u_code", "swt"]
+        self.engine_ids = ["builtin", "builtin_precise", "scc", "tokei"]
         self.engine_key = "builtin"
         self.file_rows = []
         self.lang_rows = []
@@ -454,12 +453,6 @@ class CodeProfileTab(ToolTab):
         engine = self.engine_ids[self.combo_engine.current()]
         # 先把所有"选不了"的情况挡在前面：被挡下时不动任何已有结果，
         # 也不改 self.engine_key（否则一次误选就把页面状态带偏了）。
-        if engine in health_engine.UNADAPTED_EXTERNAL:
-            messagebox.showerror(
-                "引擎未适配",
-                f"{health_engine.UNADAPTED_EXTERNAL[engine]} 的输出格式本页暂未适配，"
-                "请改用「内置启发式」或「内置 + 精确·lizard」。")
-            return
         if engine == "builtin_precise" and not self.optional.get("lizard"):
             messagebox.showerror(
                 "精确层不可用",

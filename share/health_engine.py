@@ -33,11 +33,7 @@ ENGINE_LABELS = {
     "builtin_precise": "内置 + 精确·lizard（慢）",
     "scc": "scc（外部）",
     "tokei": "tokei（外部·仅成分）",
-    "fuck_u_code": "fuck-u-code（外部·未适配）",
-    "swt": "Sweet（外部·未适配）",
 }
-# 本页暂未适配其输出格式的外部工具：列在下拉里可见，选中时明确提示，不静默
-UNADAPTED_EXTERNAL = {"fuck_u_code": "fuck-u-code", "swt": "Sweet"}
 
 
 # ==================== 单文件扫描（单遍 IO） ====================
@@ -304,8 +300,6 @@ def detect_optional():
         "lizard": lizard_available(),
         "scc": shutil.which("scc"),
         "tokei": shutil.which("tokei"),
-        "fuck_u_code": shutil.which("fuck-u-code"),
-        "swt": shutil.which("swt"),
     }
 
 

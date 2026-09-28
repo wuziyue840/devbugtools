@@ -4,6 +4,7 @@
 ### 本次更新
 - 扩充语言识别范围：133 种语言 / 194 个扩展名 / 75 个特殊文件名（新增 Zig、Solidity、Elixir、Haskell、Terraform、CMake、Verilog、Fortran 等，以及 CMakeLists.txt、Jenkinsfile、go.mod、各类 rc/ignore 配置）
 - 「代码成分表」新增「未识别扩展名」提示（状态栏 / 卡片 / 导出 HTML 与 Markdown），方便按需补语言表
+- 「代码成分表」引擎列表去掉两个输出格式未适配的外部工具（fuck-u-code / Sweet），下拉只留可用的四个引擎
 
 ## [1.3.0] - 2026-09-28
 ### 本次更新
